@@ -1,1 +1,0 @@
-The current value of count is: 0
