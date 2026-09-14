@@ -1,13 +1,28 @@
 [project]
 name = "jupyter-content"
 version = "0.1.0"
-description = "Add your description here"
+description = "Environment for Comp Tools Res Jupyter and Marimo notebooks"
 readme = "README.md"
 authors = [
     { name = "Matt Gitzendanner", email = "magitz@ufl.edu" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "beautifulsoup4",
+    "matplotlib",
+    "marimo:,
+    "numpy",
+    "openpyxl",
+    "pandas",
+    "pillow",
+    "requests",
+    "scipy",
+    "seaborn",
+    "scikit-learn",
+    "sqlalchemy",
+    "tensorflow",
+    "xgboost",
+]
 
 [project.scripts]
 jupyter-content = "jupyter_content:main"
