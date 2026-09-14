@@ -226,7 +226,7 @@ def _(mo):
     mo.md(r"""
     ## 14.10 Inheritance
 
-    Inheritance is the ability to create new classes (called the child class) that extend the features of and existing class (called the parent class).
+    Inheritance is the ability to create new classes (called the child class) that extend the features of an existing class (called the parent class).
 
     **Note** that for this example, the PartyAnimal class from section 14.9 is saved to a file in the current directory called [`party.py`](party.py) and is being imported.
     """)
