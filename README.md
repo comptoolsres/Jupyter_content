@@ -7,6 +7,14 @@ This repo contains the Jupyter Notebook portions of my notes for the class. Thes
 
 View in Binder:  [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/comptoolsres/Jupyter_content.git/master)
 
+## To setup a kernel for Jupyter
+
+To create a kernel for you to use in Jupyter, run the following command in a HiPerGator terminal:
+
+    cp -r /blue/bsc4452/share/kernels/bsc4452  ~/.local/share/jupyter/kernels/
+
+That should create a kernel card called "BSC 4452 Kernel"
+
 ## Fall 2026: Added Marimo option
 
 See more information on Marimo here [https://marimo.io/](https://marimo.io/).
