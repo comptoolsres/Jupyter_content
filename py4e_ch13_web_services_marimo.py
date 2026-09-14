@@ -101,7 +101,7 @@ def _(mo):
 
     The same has happened with weather data--the last time I taught this course, there were sites with free APIs for getting weather data, most of those have now gone to authenticated only.
 
-    As more and more sites try to monitize thier data, authentication will be more important, and often require payment for access.
+    As more and more sites try to monetize their data, authentication will be more important, and often requires payment for access.
 
     That said, authentication can be a challenge in a course. I do not want to force all of you to sign up for a Google API or some other account. This limits what can be done.
 
