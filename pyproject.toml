@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.14"
 dependencies = [
     "beautifulsoup4",
+    "ipykernel",
     "matplotlib",
     "marimo",
     "numpy",
@@ -20,7 +21,8 @@ dependencies = [
     "seaborn",
     "scikit-learn",
     "sqlalchemy",
-    "tensorflow",
+    "torch",
+    "torchvision",
     "xgboost",
 ]
 
