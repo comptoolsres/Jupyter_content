@@ -29,7 +29,7 @@ def _(mo):
     * Clone the [repository](https://github.com/comptoolsres/Jupyter_content) to your space on HiPerGator, log into [Open OnDemand](https://ondemand.rc.ufl.edu/), launch a Jupyter session, and open the notebooks and play with the code.
       * One advantage of this is that you can run `git pull` periodically to get updated content.
 
-    * The Google Colaboratory runs Notebooks. You can [open this notebook here](https://colab.research.google.com/github/comptoolsres/Jupyter_content/blob/master/py4e_ch2_varaibles_and_types.ipynb) or load the whole repository from the File menu > Open Notebook, select the GitHub tab and paste the URL to the repository: https://github.com/comptoolsres/Jupyter_content
+    * The Google Colaboratory runs Notebooks. You can [open this notebook here](https://colab.research.google.com/github/comptoolsres/Jupyter_content/blob/master/py4e_ch02_varaibles_and_types.ipynb) or load the whole repository from the File menu > Open Notebook, select the GitHub tab and paste the URL to the repository: https://github.com/comptoolsres/Jupyter_content
       * This will work for most of the things we do in class and may be easier than using HiPerGator for some. There are a few data files too large for the git repo, but I try to provide another source to download those.
 
     * View the notebooks in Binder: [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/comptoolsres/Jupyter_content.git/main)
