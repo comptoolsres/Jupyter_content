@@ -260,7 +260,7 @@ def _(count_1):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    To me, this is a frustrating limitation, but there is a relatively easy work around. This is demonstrated on p. 88 without really explainging why this is handy. Re-writing for our example, we get:
+    To me, this is a frustrating limitation, but there is a relatively easy workaround. This is demonstrated on p. 88 without really explaining why this is handy. Rewritting for our example, we get:
     """)
     return
 
