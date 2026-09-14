@@ -257,7 +257,7 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    As noted at the start of the chapter, you don't need to have the parentheses around the x,y,z to create tuple--stylistically, the "pythonic" way is to not use them in this case
+    As noted at the start of the chapter, you don't need to have the parentheses around the x,y,z to create a tuple--stylistically, the "pythonic" way is to not use them in this case
     """)
     return
 
