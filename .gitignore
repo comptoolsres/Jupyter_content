@@ -88,6 +88,9 @@ venv.bak/
 .marimo/
 .marimo-cache/
 marimo/
+__marimo__/
+layouts/
+uv.lock
 # If you export marimo notebooks as .py files, ignore the generated __pycache__ as above.
 # If you keep the notebook files themselves (usually .py), you may want to version them;
 # otherwise ignore them:
