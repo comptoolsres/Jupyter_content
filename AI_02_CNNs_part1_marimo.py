@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.24.0"
+__generated_with = "0.24.2"
 app = marimo.App()
 
 
@@ -45,24 +45,15 @@ def _(mo):
 def _():
     import numpy as np
     import pandas as pd
-
-    import matplotlib.image as mpimg
     import matplotlib.pyplot as plt
-    # '%matplotlib inline' command supported automatically in marimo
 
-    import tensorflow as tf
-    from tensorflow import keras
-    from tensorflow.keras.preprocessing import image_dataset_from_directory
-    from tensorflow.keras.preprocessing.image import ImageDataGenerator
-    from tensorflow.keras.preprocessing import image as image_utils
+    import torch
+    from torch import nn
+    from torch.utils.data import DataLoader, TensorDataset
 
-    from tensorflow.keras.models import Sequential
-    from tensorflow.keras import layers
-    from tensorflow.keras.layers import Dense
+    from helpers_plot_history import plot_history
 
-    from helpers_plot_history import plot_history # A function to plot training history. 
-                                # We 1st used the code in 15_neural_networks.ipynb.
-    return Dense, Sequential, keras, pd, plot_history, plt
+    return DataLoader, TensorDataset, nn, np, pd, plt, torch
 
 
 @app.cell
@@ -79,12 +70,12 @@ def _(sign_train):
 
 
 @app.cell
-def _(sign_test, sign_train):
-    y_train = sign_train['label']
-    X_train = sign_train.drop(columns='label').values
+def _(np, sign_test, sign_train):
+    y_train = sign_train['label'].to_numpy(dtype=np.int64)
+    X_train = sign_train.drop(columns='label').to_numpy(dtype=np.float32) / 255
 
-    y_test = sign_test['label']
-    X_test = sign_test.drop(columns='label').values
+    y_test = sign_test['label'].to_numpy(dtype=np.int64)
+    X_test = sign_test.drop(columns='label').to_numpy(dtype=np.float32) / 255
 
     X_test.shape
     return X_test, X_train, y_test, y_train
@@ -112,7 +103,7 @@ def _(mo):
     mo.md(r"""
     ## Normalize the data
 
-    As we mentioned in previous classes, networks train better with standardized or normalized data. Normalization tends to work best with images, so can look at the min and max of our dataset to get those and divide by the max value
+    As we mentioned in previous classes, networks train better with standardized or normalized data. Here, the pixel values are normalized to the range 0-1 when the data are loaded.
     """)
     return
 
@@ -124,30 +115,29 @@ def _(X_train):
 
 
 @app.cell
-def _(X_test, X_train):
-    # Normalize our data (get values between 0-1)
-    X_train_1 = X_train / 255
-    X_test_1 = X_test / 255
-    return X_test_1, X_train_1
+def _(DataLoader, TensorDataset, X_test, X_train, torch, y_test, y_train):
+    train_dataset = TensorDataset(torch.from_numpy(X_train), torch.from_numpy(y_train))
+    test_dataset = TensorDataset(torch.from_numpy(X_test), torch.from_numpy(y_test))
+    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=256)
+    return test_loader, train_loader
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Labels to categorical
+    ## Prepare the labels
 
-    We want out labels to be categorical. As they are now, the labels are 0, 1,...,24 (to be honest, I am not sure why there are 25 classes. Should only be 24...). That would imply label 1 is more similar to label 2 than to label 23 and that label 3 is less than label 4. Converting to categorical labels converts these to named categories, removing the order/associations among the names.
+    The labels are integer category codes from 0 through 24. PyTorch's `CrossEntropyLoss` uses these integer labels directly, so no one-hot conversion is needed.
     """)
     return
 
 
 @app.cell
-def _(keras, y_test, y_train):
-    # Convert our classes to categorical
-    num_classes = 25
-    y_train_1 = keras.utils.to_categorical(y_train, num_classes)  # Not entirely sure what the 25th category is...
-    y_test_1 = keras.utils.to_categorical(y_test, num_classes)
-    return num_classes, y_test_1, y_train_1
+def _(np, y_train):
+    num_classes = int(np.unique(y_train).size)
+    print(f"Number of classes: {num_classes}")
+    return (num_classes,)
 
 
 @app.cell(hide_code=True)
@@ -155,24 +145,34 @@ def _(mo):
     mo.md(r"""
     ## Make our model
 
-    I've kept the code format here as it was in the Nvidia exercise. This is another common method of making a model. So far, I've used the format below to keep things similar to `sklearn Pipelines`, but I want to expose you to this `model.add` format too. The code in the block below is the same as this:
-
-        model = Sequential([
-            layers.Dense(units = 512, activation='relu', input_shape=(784,))),
-            layers.Dense(units = 512, activation='relu')),
-            layers.Dense(units = num_classes, activation='softmax'))
-            ])
+    PyTorch models are defined as subclasses of `nn.Module`. This model has two hidden layers with 512 neurons each and an output layer with one score per class. `CrossEntropyLoss` applies the appropriate normalization to those output scores.
     """)
     return
 
 
 @app.cell
-def _(Dense, Sequential, num_classes):
-    model = Sequential()
-    model.add(Dense(units = 512, activation='relu', input_shape=(784,)))
-    model.add(Dense(units = 512, activation='relu'))
-    model.add(Dense(units = num_classes, activation='softmax'))
-    return (model,)
+def _(nn, num_classes, torch):
+    class SimpleClassifier(nn.Module):
+        def __init__(self, num_classes):
+            super().__init__()
+            self.network = nn.Sequential(
+                nn.Flatten(),
+                nn.Linear(784, 512),
+                nn.ReLU(),
+                nn.Linear(512, 512),
+                nn.ReLU(),
+                nn.Linear(512, num_classes),
+            )
+
+        def forward(self, inputs):
+            return self.network(inputs)
+
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = SimpleClassifier(num_classes).to(device)
+    loss_function = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters())
+    return device, loss_function, model, optimizer
 
 
 @app.cell
@@ -190,22 +190,79 @@ def _(mo):
 
 
 @app.cell
-def _(model):
-    model.compile(loss='categorical_crossentropy', metrics=['accuracy'])
+def _(device, model):
+    print(model)
+    print(f"Training on: {device}")
     return
 
 
 @app.cell
-def _(X_test_1, X_train_1, model, y_test_1, y_train_1):
-    history = model.fit(X_train_1, y_train_1, epochs=20, verbose=1, validation_data=(X_test_1, y_test_1))
+def _(
+    device,
+    loss_function,
+    model,
+    optimizer,
+    test_loader,
+    torch,
+    train_loader,
+):
+    def evaluate(model, data_loader):
+        model.eval()
+        total_loss = 0.0
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for inputs, labels in data_loader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = model(inputs)
+                total_loss += loss_function(outputs, labels).item() * labels.size(0)
+                correct += (outputs.argmax(dim=1) == labels).sum().item()
+                total += labels.size(0)
+        return total_loss / total, correct / total
+
+
+    history = {"loss": [], "val_loss": [], "accuracy": [], "val_accuracy": []}
+    epochs = 20
+    for epoch in range(epochs):
+        model.train()
+        running_loss = 0.0
+        correct = 0
+        total = 0
+        for inputs, labels in train_loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = loss_function(outputs, labels)
+            loss.backward()
+            optimizer.step()
+            running_loss += loss.item() * labels.size(0)
+            correct += (outputs.argmax(dim=1) == labels).sum().item()
+            total += labels.size(0)
+
+        train_loss = running_loss / total
+        train_accuracy = correct / total
+        validation_loss, validation_accuracy = evaluate(model, test_loader)
+        history["loss"].append(train_loss)
+        history["accuracy"].append(train_accuracy)
+        history["val_loss"].append(validation_loss)
+        history["val_accuracy"].append(validation_accuracy)
+        print(f"Epoch {epoch + 1:02d}/{epochs}: loss={train_loss:.4f}, accuracy={train_accuracy:.3f}, val_loss={validation_loss:.4f}, val_accuracy={validation_accuracy:.3f}")
     return (history,)
 
 
 @app.cell
-def _(history, plot_history):
-    # Call the plot_history function we made and imported from helpers_plot_history.py
-
-    plot_history(history)
+def _(history, plt):
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+    axes[0].plot(history["accuracy"], label="train")
+    axes[0].plot(history["val_accuracy"], label="test")
+    axes[0].set(title="Model accuracy", xlabel="epoch", ylabel="accuracy")
+    axes[0].legend()
+    axes[1].plot(history["loss"], label="train")
+    axes[1].plot(history["val_loss"], label="test")
+    axes[1].set(title="Model loss", xlabel="epoch", ylabel="loss")
+    axes[1].legend()
+    plt.tight_layout()
+    plt.show()
     return
 
 

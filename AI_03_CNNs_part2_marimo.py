@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.24.0"
+__generated_with = "0.24.2"
 app = marimo.App()
 
 
@@ -16,9 +16,9 @@ def _(mo):
     mo.md(r"""
     # Introduction to Convolutional Neural Networks, part 2
 
-    In [part 1](AI_02_CNNs_part1.ipynb) of this section, we loaded the ASL data, visualized some sample images, normalized the data, and created and trained a model. That model had three layed, the first two had 512 neurons and the last had 25 and used the softmax activation function to generate a prediction that was the probablity that an image belonged to each of the 25 categories.
+    In [part 1](AI_02_CNNs_part1.ipynb) of this section, we loaded the ASL data, visualized sample images, normalized the data, and created and trained a model. That model had three layers: the first two had 512 neurons, and the last had 25. It used the softmax activation function to generate a prediction representing the probability that an image belonged to each category.
 
-    With that model, we achieved an accuract of about 80%.
+    With that model, we achieved an accuracy of about 80%.
 
     We looked at some [slides on convolutional kernels, padding, pooling, dropout and data augmentation](https://docs.google.com/presentation/d/1uSk7xHWZ9H6YihUP4OdHpIVws_2py_HBfbby7GpZDCA/edit?usp=sharing). Now we can implement these.
 
@@ -32,58 +32,41 @@ def _():
     import numpy as np
     import pandas as pd
     import matplotlib.pyplot as plt
-    # '%matplotlib inline' command supported automatically in marimo
     from PIL import Image
+
+    import torch
+    from torch import nn
+    from torch.utils.data import DataLoader, Dataset, TensorDataset
+    from torchvision import transforms
+
     import matplotlib.image as mpimg
 
-    import tensorflow as tf
-    from tensorflow import keras
-    from tensorflow.keras.preprocessing import image_dataset_from_directory
-    from tensorflow.keras.preprocessing.image import ImageDataGenerator
-    from tensorflow.keras.preprocessing import image as image_utils
-
-    from tensorflow.keras.models import Sequential
-    from tensorflow.keras import layers
-    from tensorflow.keras.layers import Dense
-
-    from helpers_plot_history import plot_history # Some helper functions for the CNN notebooks.
-
     return (
-        Dense,
-        ImageDataGenerator,
-        Sequential,
-        image_utils,
-        keras,
-        mpimg,
+        DataLoader,
+        Dataset,
+        Image,
+        TensorDataset,
+        nn,
         np,
         pd,
-        plot_history,
         plt,
+        torch,
+        transforms,
     )
 
 
 @app.cell
-def _(keras, pd):
-    # Load the data
+def _(np, pd):
     sign_train = pd.read_csv("data/sign_mnist/sign_mnist_train.csv")
     sign_test = pd.read_csv("data/sign_mnist/sign_mnist_test.csv")
 
-    # Prepare X and y
-    y_train = sign_train['label']
-    X_train = sign_train.drop(columns='label').values
+    y_train = sign_train['label'].to_numpy(dtype=np.int64)
+    X_train = sign_train.drop(columns='label').to_numpy(dtype=np.float32) / 255
 
-    y_test = sign_test['label']
-    X_test = sign_test.drop(columns='label').values
+    y_test = sign_test['label'].to_numpy(dtype=np.int64)
+    X_test = sign_test.drop(columns='label').to_numpy(dtype=np.float32) / 255
 
-    # Normalize the data
-    X_train = X_train/255
-    X_test = X_test/255
-
-    # Convert our classes to categorical
-    num_classes = 25 # Not entirely sure what the 25th category is...
-
-    y_train = keras.utils.to_categorical(y_train, num_classes)
-    y_test = keras.utils.to_categorical(y_test, num_classes)
+    num_classes = int(np.unique(y_train).size)
     return X_test, X_train, num_classes, y_test, y_train
 
 
@@ -102,12 +85,18 @@ def _(mo):
 
 
 @app.cell
-def _(X_test, X_train):
-    print(f'Shape before: {X_train.shape}')
-    X_train_1 = X_train.reshape(-1, 28, 28, 1)
-    X_test_1 = X_test.reshape(-1, 28, 28, 1)
-    print(f'Shape after: {X_train_1.shape}')
-    return X_test_1, X_train_1
+def _(DataLoader, TensorDataset, X_test, X_train, torch, y_test, y_train):
+    X_train_1 = torch.from_numpy(X_train).reshape(-1, 1, 28, 28)
+    X_test_1 = torch.from_numpy(X_test).reshape(-1, 1, 28, 28)
+    y_train_1 = torch.from_numpy(y_train)
+    y_test_1 = torch.from_numpy(y_test)
+    train_dataset = TensorDataset(X_train_1, y_train_1)
+    test_dataset = TensorDataset(X_test_1, y_test_1)
+    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=256)
+    print(f'Training shape: {X_train_1.shape}')
+    print(f'Test shape: {X_test_1.shape}')
+    return X_train_1, test_loader, train_loader, y_train_1
 
 
 @app.cell(hide_code=True)
@@ -123,24 +112,42 @@ def _(mo):
 
 
 @app.cell
-def _(Dense, Sequential, num_classes):
-    from tensorflow.keras.layers import Conv2D, MaxPool2D, Flatten, Dropout, BatchNormalization
-    model = Sequential()
-    model.add(Conv2D(75, (3, 3), strides=1, padding='same', activation='relu', input_shape=(28, 28, 1)))
-    model.add(BatchNormalization())
-    model.add(MaxPool2D((2, 2), strides=2, padding='same'))
-    model.add(Conv2D(50, (3, 3), strides=1, padding='same', activation='relu'))
-    model.add(Dropout(0.2))
-    model.add(BatchNormalization())
-    model.add(MaxPool2D((2, 2), strides=2, padding='same'))
-    model.add(Conv2D(25, (3, 3), strides=1, padding='same', activation='relu'))
-    model.add(BatchNormalization())
-    model.add(MaxPool2D((2, 2), strides=2, padding='same'))
-    model.add(Flatten())
-    model.add(Dense(units=512, activation='relu'))
-    model.add(Dropout(0.3))
-    model.add(Dense(units=num_classes, activation='softmax'))
-    return (model,)
+def _(nn, num_classes, torch):
+    class CNNClassifier(nn.Module):
+        def __init__(self, num_classes):
+            super().__init__()
+            self.features = nn.Sequential(
+                nn.Conv2d(1, 75, kernel_size=3, padding='same'),
+                nn.BatchNorm2d(75),
+                nn.ReLU(),
+                nn.MaxPool2d(2, stride=2),
+                nn.Conv2d(75, 50, kernel_size=3, padding='same'),
+                nn.ReLU(),
+                nn.Dropout(0.2),
+                nn.BatchNorm2d(50),
+                nn.MaxPool2d(2, stride=2),
+                nn.Conv2d(50, 25, kernel_size=3, padding='same'),
+                nn.ReLU(),
+                nn.BatchNorm2d(25),
+                nn.MaxPool2d(2, stride=2),
+            )
+            self.classifier = nn.Sequential(
+                nn.Flatten(),
+                nn.Linear(25 * 4 * 4, 512),
+                nn.ReLU(),
+                nn.Dropout(0.3),
+                nn.Linear(512, num_classes),
+            )
+
+        def forward(self, inputs):
+            return self.classifier(self.features(inputs))
+
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = CNNClassifier(num_classes).to(device)
+    loss_function = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters())
+    return device, loss_function, model, optimizer
 
 
 @app.cell
@@ -156,14 +163,72 @@ def _(model):
 
 
 @app.cell
-def _(X_test_1, X_train_1, model, y_test, y_train):
-    history = model.fit(X_train_1, y_train, epochs=5, verbose=1, validation_data=(X_test_1, y_test))
-    return (history,)
+def _(
+    device,
+    loss_function,
+    model,
+    optimizer,
+    test_loader,
+    torch,
+    train_loader,
+):
+    def evaluate(model, data_loader):
+        model.eval()
+        total_loss = 0.0
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for inputs, labels in data_loader:
+                inputs, labels = (inputs.to(device), labels.to(device))
+                outputs = model(inputs)
+                total_loss = total_loss + loss_function(outputs, labels).item() * labels.size(0)
+                correct = correct + (outputs.argmax(dim=1) == labels).sum().item()
+                total = total + labels.size(0)
+        return (total_loss / total, correct / total)
+
+    def train_model(model, data_loader, epochs=5):
+        history = {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}
+        for epoch in range(epochs):
+            model.train()
+            running_loss = 0.0
+            correct = 0
+            total = 0
+            for inputs, labels in data_loader:
+                inputs, labels = (inputs.to(device), labels.to(device))
+                optimizer.zero_grad()
+                outputs = model(inputs)
+                loss = loss_function(outputs, labels)
+                loss.backward()
+                optimizer.step()
+                running_loss = running_loss + loss.item() * labels.size(0)
+                correct = correct + (outputs.argmax(dim=1) == labels).sum().item()
+                total = total + labels.size(0)
+            train_loss = running_loss / total
+            train_accuracy = correct / total
+            validation_loss, validation_accuracy = evaluate(model, test_loader)
+            history['loss'].append(train_loss)
+            history['accuracy'].append(train_accuracy)
+            history['val_loss'].append(validation_loss)
+            history['val_accuracy'].append(validation_accuracy)
+            print(f'Epoch {epoch + 1:02d}/{epochs}: loss={train_loss:.4f}, accuracy={train_accuracy:.3f}, val_loss={validation_loss:.4f}, val_accuracy={validation_accuracy:.3f}')
+        return history
+    history = train_model(model, train_loader, epochs=5)
+    return history, train_model
 
 
 @app.cell
-def _(history, plot_history):
-    plot_history(history)
+def _(history, plt):
+    _fig, _axes = plt.subplots(1, 2, figsize=(12, 4))
+    _axes[0].plot(history['accuracy'], label='train')
+    _axes[0].plot(history['val_accuracy'], label='test')
+    _axes[0].set(title='Model accuracy', xlabel='epoch', ylabel='accuracy')
+    _axes[0].legend()
+    _axes[1].plot(history['loss'], label='train')
+    _axes[1].plot(history['val_loss'], label='test')
+    _axes[1].set(title='Model loss', xlabel='epoch', ylabel='loss')
+    _axes[1].legend()
+    plt.tight_layout()
+    plt.show()
     return
 
 
@@ -173,75 +238,82 @@ def _(mo):
     ## Getting better, but still not great
     ### Add some data augmentation
 
-    This is implemented using a data flow generator. This image from Adrian Rosenbrock's article [Keras ImageDataGenerator and Data Augmentation](https://pyimagesearch.com/2019/07/08/keras-imagedatagenerator-and-data-augmentation/) is a good summary:
-
-    ![Data flow generator diagram](https://929687.smushcdn.com/2633864/wp-content/uploads/2019/07/keras_data_augmentation_in_place.png?lossy=1&strip=1&webp=1)
+    Data augmentation creates varied training examples by applying random transformations to the original images. In the next cell, `torchvision.transforms.RandomAffine` rotates, shifts, and scales images as they are loaded.
     """)
     return
 
 
 @app.cell
-def _(ImageDataGenerator):
-    datagen = ImageDataGenerator(
-        rotation_range=10,  # randomly rotate images in the range (degrees, 0 to 180)
-        zoom_range=0.1,  # Randomly zoom image
-        width_shift_range=0.1,  # randomly shift images horizontally (fraction of total width)
-        height_shift_range=0.1,  # randomly shift images vertically (fraction of total height)
-        horizontal_flip=True,  # randomly flip images horizontally
-        vertical_flip=False, # Don't randomly flip images vertically
-    )
-    return (datagen,)
+def _(DataLoader, Dataset, X_train_1, transforms, y_train_1):
+    augmentation = transforms.Compose([transforms.RandomAffine(degrees=10, translate=(0.1, 0.1), scale=(0.9, 1.1))])
+
+    class AugmentedDataset(Dataset):
+
+        def __init__(self, images, labels, transform):
+            self.images = images
+            self.labels = labels
+            self.transform = transform
+
+        def __len__(self):
+            return len(self.labels)
+
+        def __getitem__(self, index):
+            return (self.transform(self.images[index]), self.labels[index])
+    augmented_dataset = AugmentedDataset(X_train_1, y_train_1, augmentation)
+    augmented_loader = DataLoader(augmented_dataset, batch_size=128, shuffle=True)
+    return augmented_dataset, augmented_loader
 
 
 @app.cell
-def _(X_train_1, datagen, np, plt, y_train):
-    batch_size = 32
-    img_iter = datagen.flow(X_train_1, y_train, batch_size=batch_size)
-    x, y = img_iter.next()
-    fig, ax = plt.subplots(nrows=4, ncols=8)
-    for _i in range(batch_size):
-        image = x[_i]
-        ax.flatten()[_i].imshow(np.squeeze(image))
+def _(DataLoader, augmented_dataset, plt):
+    images, labels = next(iter(DataLoader(augmented_dataset, batch_size=32, shuffle=True)))
+    _fig, _axes = plt.subplots(nrows=4, ncols=8, figsize=(12, 6))
+    for index, axis in enumerate(_axes.flat):
+        axis.imshow(images[index].squeeze(), cmap='gray')
+        axis.axis('off')
+    plt.tight_layout()
     plt.show()
-    return batch_size, img_iter
+    return
 
 
 @app.cell
-def _(X_train_1, datagen, model):
-    # Fit the generator o nthe taining data.
-    datagen.fit(X_train_1)
-    # Compile the new model
-    model.compile(loss='categorical_crossentropy', metrics=['accuracy'])
+def _(model, torch):
+    # PyTorch applies the augmentation when each training sample is loaded.
+    optimizer_1 = torch.optim.Adam(model.parameters())
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    From the Nvidia notebooks:
+    Data augmentation applies a random transform each time a training sample is loaded. This gives us a new augmented version of the image during each epoch, helping the model generalize beyond the original training examples.
 
-    > When using an image data generator with Keras, a model trains a bit differently: instead of just passing the `[X]_train` and `y_train` datasets into the model, we pass the generator in, calling the generator's [flow](https://keras.io/api/preprocessing/image/) method. This causes the images to get augmented live and in memory right before they are passed into the model for training.
-    >
-    > Generators can supply an indefinite amount of data, and when we use them to train our data, we need to explicitly set how long we want each epoch to run, or else the epoch will go on indefinitely, with the generator creating an indefinite number of augmented images to provide the model.
-    >
-    > We explicitly set how long we want each epoch to run using the `steps_per_epoch` named argument. Because `steps * batch_size = number_of_images_trained in an epoch` a common practice, that we will use here, is to set the number of steps equal to the non-augmented dataset size divided by the batch_size (which has a default value of 32).
-    >
-    > Run the following cell to see the results. The training will take longer than before, which makes sense given we are now training on more data than previously:
+    The example below uses `torchvision.transforms.RandomAffine` to rotate, shift, and scale the images. The training will take longer than before because each sample is transformed as it is loaded.
 
-    Note that I have reduced the number of epochs to 5. That generally works, but was mostly done because we are doing this on CPUs, not GPUS. This is really where we would want to transition to using a GPU for AI model training.
+    Note that I have reduced the number of epochs to 5. That generally works, but was mostly done because we are doing this on CPUs, not GPUs. This is really where we would want to transition to using a GPU for AI model training.
     """)
     return
 
 
 @app.cell
-def _(X_test_1, X_train_1, batch_size, img_iter, model, y_test):
-    history_1 = model.fit(img_iter, epochs=5, steps_per_epoch=len(X_train_1) / batch_size, validation_data=(X_test_1, y_test))  # Run same number of steps we would if we were not using a generator.
-    return (history_1,)
+def _(augmented_loader, model, train_model):
+    history_augmented = train_model(model, augmented_loader, epochs=5)
+    return (history_augmented,)
 
 
 @app.cell
-def _(history_1, plot_history):
-    plot_history(history_1)
+def _(history_augmented, plt):
+    _fig, _axes = plt.subplots(1, 2, figsize=(12, 4))
+    _axes[0].plot(history_augmented['accuracy'], label='train')
+    _axes[0].plot(history_augmented['val_accuracy'], label='test')
+    _axes[0].set(title='Model accuracy after augmentation', xlabel='epoch', ylabel='accuracy')
+    _axes[0].legend()
+    _axes[1].plot(history_augmented['loss'], label='train')
+    _axes[1].plot(history_augmented['val_loss'], label='test')
+    _axes[1].set(title='Model loss after augmentation', xlabel='epoch', ylabel='loss')
+    _axes[1].legend()
+    plt.tight_layout()
+    plt.show()
     return
 
 
@@ -256,35 +328,31 @@ def _(mo):
 
 
 @app.cell
-def _(image_utils, model, mpimg, np, plt):
+def _(Image, device, model, num_classes, plt, torch, transforms):
     def show_image(image_path):
-        """Shows the image at a given path as it is."""
-        image = mpimg.imread(image_path)
+        image = Image.open(image_path).convert('L')
         plt.imshow(image, cmap='gray')
+        plt.axis('off')
+
 
     def load_and_scale_image(image_path):
-        """Loads and scales the image to a 28x28 greyscale image, like the training data"""
-        image = image_utils.load_img(image_path, color_mode='grayscale', target_size=(28, 28))
-        return image
+        image = Image.open(image_path).convert('L').resize((28, 28))
+        return transforms.ToTensor()(image)
+
+
     alphabet = 'abcdefghijklmnopqrstuvwxy'
-    # Creates a dictionary to lookup what category number is what. 
-    # NOTE: this is based on there being 24 categories, we have 25, somehwere this will go wrong...
-    dictionary = {}
-    for _i in range(24):
-        dictionary[_i] = alphabet[_i]
-    dictionary
+    dictionary = {index: letter for index, letter in enumerate(alphabet[:num_classes])}
+
 
     def predict_letter(file_path):
-        """Given an image, load it, scale for model and predict letter"""
         show_image(file_path)
-        image = load_and_scale_image(file_path)
-        image = image_utils.img_to_array(image)
-        image = image.reshape(1, 28, 28, 1)
-        image = image / 255
-        prediction = model.predict(image)
-        print(prediction)
-        predicted_letter = dictionary[np.argmax(prediction)]  # print the whole prediction array, probability for each category.
-        return predicted_letter  # convert prediction to letter
+        image = load_and_scale_image(file_path).unsqueeze(0).to(device)
+        model.eval()
+        with torch.no_grad():
+            prediction = model(image)
+            predicted_letter = dictionary[prediction.argmax(dim=1).item()]
+        print(prediction.softmax(dim=1))
+        return predicted_letter
 
     return (predict_letter,)
 
