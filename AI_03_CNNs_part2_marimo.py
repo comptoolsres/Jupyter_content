@@ -92,7 +92,7 @@ def _(mo):
     mo.md(r"""
     ## Add Convolutional Kernels, Max Pooling, and Dropout
 
-    In part 1, we treated the image data as a row of 784 pixels. But our images are 28 rows of 28 pixels (a matrix of pixels). There is information in that spacial arrangement that is lost by simplifying the data into a row.
+    In part 1, we treated the image data as a row of 784 pixels. But our images are 28 rows of 28 pixels (a matrix of pixels). There is information in that spatial arrangement that is lost by simplifying the data into a row.
 
     Most computer vision tasks work best with the images in that matrix format. So, let's transform the data into the 28X28 shape.
 
