@@ -25,8 +25,8 @@ There is more information [here](https://docs.rc.ufl.edu/software/uv/), but foll
 
 1. Make a symlink for your uv cache folder, **you will need to change "GROUP" to your group name, e.g. "bsc4452"**: 
 
-        mkdir /blue/GROUP/$USER/cache
-        ln -l /blue/GROUP/$USER/cache .cache/uv
+        mkdir -p /blue/GROUP/$USER/cache/uv
+        ln -s /blue/GROUP/$USER/cache .cache/uv
 2. Clone this repo to your /blue directory
 3. Set up the uv environment
 
