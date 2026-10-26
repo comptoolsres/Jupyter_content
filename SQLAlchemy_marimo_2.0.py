@@ -7,94 +7,128 @@ app = marimo.App()
 @app.cell
 def _():
     import marimo as mo
-    from sqlalchemy import create_engine, MetaData, Table, select, desc
+    from sqlalchemy import (
+        Column,
+        ForeignKey,
+        Integer,
+        MetaData,
+        String,
+        Table,
+        create_engine,
+        desc,
+        select,
+    )
 
-    return mo, create_engine, MetaData, Table, select, desc
+    return (
+        Column,
+        ForeignKey,
+        Integer,
+        MetaData,
+        String,
+        Table,
+        create_engine,
+        desc,
+        mo,
+        select,
+    )
 
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(
-        r"""
-# SQLAlchemy (2.0 style)
+    mo.md(r"""
+    # SQLAlchemy (2.0 style)
 
-We'll start off using the world.sqlite database again.
+    We'll start off using the world.sqlite database again.
 
-This marimo notebook uses modern SQLAlchemy 2.x Core patterns.
-"""
-    )
+    This marimo notebook uses modern SQLAlchemy 2.x Core patterns.
+    """)
     return
 
 
 @app.cell
 def _(MetaData, create_engine):
-    engine = create_engine("sqlite:///../world.sqlite")
-    metadata = MetaData()
-    return engine, metadata
+    # Create an Engine object which is our handle into the database.
+    engine = create_engine('sqlite:///../world.sqlite')
+
+    # MetaData holds table definitions reflected from the existing database.
+    DBInfo = MetaData()
+    return DBInfo, engine
 
 
 @app.cell
-def _(Table, engine, metadata, select):
-    city = Table("city", metadata, autoload_with=engine)
-    query = select(city.c.ID, city.c.Name, city.c.Population).limit(10)
-    with engine.connect() as conn:
-        for row in conn.execute(query):
-            print(row)
-    return city
+def _(DBInfo, Table, engine, select):
+    # Auto-create the city object by reflecting the table from the database.
+    city = Table('city', DBInfo, autoload_with=engine)
+
+    # Mirroring this command: SELECT Id, Name, Population FROM city LIMIT 10;
+    _query = select(city.c.ID, city.c.Name, city.c.Population).limit(10)
+    with engine.connect() as _conn:
+        for _row in _conn.execute(_query):
+            print(_row)
+    return (city,)
 
 
 @app.cell
 def _(city, engine, select):
-    query = select(city.c.ID, city.c.Name, city.c.Population).where(city.c.Population > 5_000_000)
-    with engine.connect() as conn:
-        for row in conn.execute(query):
-            print(row)
+    # Mirroring this command: SELECT Id, Name, Population FROM city WHERE Population > 5000000;
+    _query = select(city.c.ID, city.c.Name, city.c.Population).where(
+        city.c.Population > 5000000
+    )
+    with engine.connect() as _conn:
+        for _row in _conn.execute(_query):
+            print(_row)
     return
 
 
 @app.cell
 def _(city, desc, engine, select):
-    query = (
+    # Mirroring this command:
+    #   SELECT Id, Name, Population FROM city WHERE Population > 5000000 ORDER BY Population DESC LIMIT 10;
+    _query = (
         select(city.c.ID, city.c.Name, city.c.Population)
-        .where(city.c.Population > 5_000_000)
+        .where(city.c.Population > 5000000)
         .order_by(desc(city.c.Population))
         .limit(10)
     )
-    with engine.connect() as conn:
-        for row in conn.execute(query):
-            print(row)
+    with engine.connect() as _conn:
+        _result = _conn.execute(_query)
+        for _row in _result:
+            print(_row)
+    print(type(_result))
     return
 
 
 @app.cell
-def _(Table, desc, engine, metadata, select):
-    country = Table("country", metadata, autoload_with=engine)
-    countrylanguage = Table("countrylanguage", metadata, autoload_with=engine)
+def _(DBInfo, Table, desc, engine, select):
+    # Mirroring this command:
+    # SELECT Name, Language, Percentage FROM country JOIN countrylanguage ON Code=CountryCode
+    #   WHERE Language='Portuguese' ORDER BY Percentage DESC;
+    country = Table('country', DBInfo, autoload_with=engine)
+    countrylanguage = Table('countrylanguage', DBInfo, autoload_with=engine)
 
-    query = (
+    _query = (
         select(country.c.Name, countrylanguage.c.Language, countrylanguage.c.Percentage)
-        .select_from(country.join(countrylanguage, country.c.Code == countrylanguage.c.CountryCode))
-        .where(countrylanguage.c.Language == "Portuguese")
+        .select_from(
+            country.join(countrylanguage, country.c.Code == countrylanguage.c.CountryCode)
+        )
+        .where(countrylanguage.c.Language == 'Portuguese')
         .order_by(desc(countrylanguage.c.Percentage))
     )
+    print(_query)
 
-    print(query)
-    with engine.connect() as conn:
-        for row in conn.execute(query):
-            print(row)
-
-    return city, country, countrylanguage
+    with engine.connect() as _conn:
+        for _row in _conn.execute(_query):
+            print(_row)
+    return
 
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(
-        r"""
-## Inserting
+    mo.md(r"""
+    ## Inserting
 
-This section uses SQLAlchemy 2.x insert patterns with explicit transaction handling.
-"""
-    )
+    This section uses SQLAlchemy 2.x insert patterns. Writes use `engine.begin()`, which opens a transaction and commits automatically when the block finishes (or rolls back on error).
+    """)
     return
 
 
@@ -107,68 +141,69 @@ def _(city):
 @app.cell
 def _(city):
     my_insert = city.insert().values(
-        Name="Gainesville", CountryCode="USA", District="TX", Population=16612
+        Name='Gainesville', CountryCode='USA', District='TX', Population=16612
     )
     print(my_insert)
-    return my_insert
+    return (my_insert,)
 
 
 @app.cell
 def _(engine, my_insert):
-    with engine.begin() as conn:
-        conn.execute(my_insert)
+    with engine.begin() as _conn:
+        _conn.execute(my_insert)
     return
 
 
 @app.cell
 def _(city, engine, select):
-    query = select(city.c.ID, city.c.Name, city.c.District, city.c.Population).where(city.c.Name.like("Gain%"))
-    with engine.connect() as conn:
-        for row in conn.execute(query):
-            print(row)
+    _query = select(
+        city.c.ID, city.c.Name, city.c.District, city.c.Population
+    ).where(city.c.Name.like('Gain%'))
+    with engine.connect() as _conn:
+        for _row in _conn.execute(_query):
+            print(_row)
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md("## Creating a database in SQLAlchemy 2.x")
+    mo.md(r"""
+    ## Creating a database in SQLAlchemy 2.x
+    """)
     return
 
 
 @app.cell
 def _(create_engine):
-    engine_1 = create_engine("sqlite:///test.sqlite", echo=True)
-    return engine_1
+    test_engine = create_engine('sqlite:///test.sqlite', echo=True)
+    return (test_engine,)
 
 
 @app.cell
-def _():
-    from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey
-
-    metadata = MetaData()
+def _(Column, ForeignKey, Integer, MetaData, String, Table):
+    new_metadata = MetaData()
 
     users = Table(
-        "users",
-        metadata,
-        Column("id", Integer, primary_key=True),
-        Column("name", String),
-        Column("fullname", String),
+        'users',
+        new_metadata,
+        Column('id', Integer, primary_key=True),
+        Column('name', String),
+        Column('fullname', String),
     )
 
     addresses = Table(
-        "addresses",
-        metadata,
-        Column("id", Integer, primary_key=True),
-        Column("user_id", Integer, ForeignKey("users.id")),
-        Column("email_address", String, nullable=False),
+        'addresses',
+        new_metadata,
+        Column('id', Integer, primary_key=True),
+        Column('user_id', Integer, ForeignKey('users.id')),
+        Column('email_address', String, nullable=False),
     )
-
-    return metadata, users, addresses
+    return (new_metadata,)
 
 
 @app.cell
-def _(engine_1, metadata):
-    metadata.create_all(engine_1)
+def _(new_metadata, test_engine):
+    new_metadata.create_all(test_engine)
     return
 
 
