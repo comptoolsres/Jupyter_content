@@ -9,11 +9,13 @@ authors = [
 requires-python = ">=3.14"
 dependencies = [
     "beautifulsoup4",
+    "dotenv",
     "ipykernel",
     "matplotlib",
     "marimo",
     "numpy",
     "openpyxl",
+    "openai",
     "pandas",
     "pillow",
     "requests",
@@ -24,6 +26,8 @@ dependencies = [
     "torch",
     "torchvision",
     "xgboost",
+    "anywidget>=0.11.0",
+    "nbformat>=5.11.1",
 ]
 
 [project.scripts]

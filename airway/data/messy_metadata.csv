@@ -1,0 +1,9 @@
+sample,condition,donor_line,notes
+SRR1039508,control (EtOH),N61311,
+SRR1039509,DEX treated,n61311,rerun
+SRR1039512,ctrl,N052611,
+SRR1039513,Dex,N-052611,
+SRR1039516,untrt,N080611,rerun
+SRR1039517,dexamethasone 1uM,N080611,
+SRR1039520,ctrl,N-061011,rerun
+SRR1039521,dex+,line N061011,
