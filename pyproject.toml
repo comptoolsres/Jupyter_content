@@ -18,6 +18,7 @@ dependencies = [
     "openai",
     "pandas",
     "pillow",
+    "pypdf",
     "requests",
     "scipy",
     "seaborn",
