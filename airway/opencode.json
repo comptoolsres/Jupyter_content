@@ -6,7 +6,7 @@
       "npm": "@ai-sdk/openai-compatible",
       "options": {
         "baseURL": "https://api.navigator.ai.ufl.edu/v1/",
-        "apiKey": "env:OPENAI_API_KEY"
+        "apiKey": "{env:OPENAI_API_KEY}"
       },
       "models": {
         "nemotron-3-super-120b-a12b": {}
