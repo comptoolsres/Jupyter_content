@@ -29,6 +29,7 @@ dependencies = [
     "xgboost",
     "anywidget>=0.11.0",
     "nbformat>=5.11.1",
+    "pydeseq2"
 ]
 
 [project.scripts]
