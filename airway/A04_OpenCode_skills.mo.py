@@ -78,15 +78,43 @@ def _(mo):
     mo.md(r"""
     ## Setup
 
-    ### Instructor preparation
+    ## Reconfigure our handling of keys...
 
-    Before class, test the exact OpenCode version, provider configuration, and model.
-    Skills and provider APIs change independently.
+    On Monday, we had some issues with keys. Let's try fixing that and also being a bit more safe this time.
+
+    1. **Move API keys to your home folder**: While the `.env` is probably safe, it does put your keys within the git repo and even with the `.gitignore`, there's some chance that they get committed or read by our agents.
+
+        ```bash
+        mkdir -p ~/.secrets && chmod 700 ~/.secrets
+        cp ../.env ~/.secrets/api_keys.env   # Path shoul be to your existing .env file.
+        chmod 600 ~/.secrets/api_keys.env
+        ```
+    2. **Set `.bashrc` to load API keys in each shell:** When you login or start a new shell, the `.bashrc` file is evaluated. Let's tell it to load the secrets we just added. Edit your `~/.bashrc` file to add:
+
+        ```bash
+        if [ -f ~/.secrets/api_keys.env ]; then
+        set -a; source ~/.secrets/api_keys.env; set +a
+        fi
+        ```
+    3. **Test that worked:** Open a new terminal (not the same one used above), and run:
+
+         ```bash
+         env | grep OPENAI
+        ```
+
+        You should see your OPENAI_API_KEY value
+
+    Now any tool you use on HiPerGator should have access to this key.
+
+
+    ### Preparation
+
+    The cell below does a lot of the set up work, creating a project directory to use and populating it with OpenCode, some skills, and other configuration files.
 
     Credentials should remain in environment variables or the approved credential
     store—not notebook cells, configuration literals, or Git.
 
-    The setup uses predownloaded skills from the `airway-project/.opencode/skills` directory.
+    The setup uses predownloaded skills from the `opencode_skills` directory.
     Skill installation does not install their Python dependencies.
     """)
     return
@@ -101,73 +129,108 @@ def _():
     import sqlite3
     import subprocess
     from pathlib import Path
-
     import numpy as np
     import pandas as pd
     from IPython.display import Markdown, display
-
     ROOT = Path.cwd().resolve()
-    if ROOT.name == "notebooks":
+    if ROOT.name == 'notebooks':
         ROOT = ROOT.parent
-
+    DATA = (ROOT / 'data').resolve()
+    PROJECT = (ROOT / 'notebook4_project').resolve()
+    SKILLS_SOURCE = (ROOT / 'opencode_skills').resolve()
     # Use local paths relative to the notebook
-    DATA = (ROOT / "data").resolve()
-    PROJECT = (ROOT / "notebook4_project").resolve()
-    SKILLS_SOURCE = (ROOT / "airway-project" / ".opencode" / "skills").resolve()
-
-    required = [
-        "airway_counts.csv", "airway_samples.csv", "genes.csv", "airway.db"
-    ]
+    SHARED_OPENCODE = Path('/blue/bsc4452/share/.opencode')
+    ITEMS = ['bin', '.gitignore', 'node_modules', 'package.json', 'package-lock.json']
+    dest_root = PROJECT / '.opencode'
+    required = ['airway_counts.csv', 'airway_samples.csv', 'genes.csv', 'airway.db']
     for filename in required:
         if not (DATA / filename).is_file():
             raise FileNotFoundError(DATA / filename)
-
-    if not (SKILLS_SOURCE / "pydeseq2" / "SKILL.md").is_file():
-        raise FileNotFoundError(SKILLS_SOURCE / "pydeseq2" / "SKILL.md")
-    if not (SKILLS_SOURCE / "matplotlib" / "SKILL.md").is_file():
-        raise FileNotFoundError(SKILLS_SOURCE / "matplotlib" / "SKILL.md")
-
+    if not (SKILLS_SOURCE / 'pydeseq2' / 'SKILL.md').is_file():
+        raise FileNotFoundError(SKILLS_SOURCE / 'pydeseq2' / 'SKILL.md')
+    if not (SKILLS_SOURCE / 'matplotlib' / 'SKILL.md').is_file():
+        raise FileNotFoundError(SKILLS_SOURCE / 'matplotlib' / 'SKILL.md')
     if PROJECT.exists():
-        raise FileExistsError(
-            f"{PROJECT} already exists. Use a fresh destination; do not overwrite it."
-        )
-
+        answer = input(f'{PROJECT} already exists. Delete it first? [y/N] ')
+        replace = answer.strip().lower() in ('y', 'yes')
+        if not replace:
+            raise FileExistsError(f'{PROJECT} already exists. User opted to not overwrite it.')
+        else:
+            shutil.rmtree(PROJECT)
+            print('Removed existing project folder:', PROJECT)
     PROJECT.mkdir(parents=True)
-    shutil.copytree(DATA, PROJECT / "data")
-    (PROJECT / "outputs").mkdir()
-    (PROJECT / "prompts").mkdir()
-    (PROJECT / ".opencode" / "skills").mkdir(parents=True)
-
-    # Copy predownloaded skills
-    for skill_id in ("pydeseq2", "matplotlib"):
+    shutil.copytree(DATA, PROJECT / 'data')
+    (PROJECT / 'outputs').mkdir()
+    (PROJECT / 'prompts').mkdir()
+    (PROJECT / '.opencode' / 'skills').mkdir(parents=True)
+    for skill_id in ('pydeseq2', 'matplotlib'):
         source = SKILLS_SOURCE / skill_id
-        if not (source / "SKILL.md").is_file():
-            raise FileNotFoundError(source / "SKILL.md")
-        shutil.copytree(source, PROJECT / ".opencode" / "skills" / skill_id)
+        if not (source / 'SKILL.md').is_file():
+            raise FileNotFoundError(source / 'SKILL.md')
+        shutil.copytree(source, PROJECT / '.opencode' / 'skills' / skill_id)
 
     def sha256(path):
         return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
-    # Create a minimal OpenCode config (instructor provides actual credentials externally)
-    config = {
-        "permissions": [
-            {"action": "bash", "resource": "*", "effect": "ask"},
-            {"action": "edit", "resource": "*", "effect": "ask"},
-            {"action": "skill", "resource": "*", "effect": "ask"},
-            {"action": "skill", "resource": "airway-sqlite", "effect": "allow"},
-        ]
-    }
-    (PROJECT / "opencode.json").write_text(json.dumps(config, indent=2))
-
-    manifest = {
-        "skills_source": str(SKILLS_SOURCE),
-        "input_sha256": {name: sha256(DATA / name) for name in required},
-    }
-    (PROJECT / "provenance.json").write_text(json.dumps(manifest, indent=2))
-
-    print("Project:", PROJECT)
-    print("Skills from:", SKILLS_SOURCE)
-    print("Review opencode.json before opening OpenCode.")
+    template_path = Path.cwd() / 'opencode.json'
+    config = json.loads(template_path.read_text())
+    api_key = config.get('provider', {}).get('navigator', {}).get('options', {}).get('apiKey', '')
+    if api_key.startswith('sk-'):
+    # Copy predownloaded skills
+        raise ValueError('Template contains a literal API key; use {env:...} or {file:...} instead.')
+    course_rules = [{'action': 'bash', 'resource': '*', 'effect': 'ask'}, {'action': 'edit', 'resource': '*', 'effect': 'ask'}, {'action': 'skill', 'resource': '*', 'effect': 'ask'}, {'action': 'skill', 'resource': 'airway-sqlite', 'effect': 'allow'}]
+    existing = config.get('permissions', [])
+    config['permissions'] = existing + [r for r in course_rules if r not in existing]
+    (PROJECT / 'opencode.json').write_text(json.dumps(config, indent=2) + '\n')
+    print(f"Combined {template_path} -> {PROJECT / 'opencode.json'}")
+    print(json.dumps(config, indent=2))
+    manifest = {'skills_source': str(SKILLS_SOURCE), 'input_sha256': {name: sha256(DATA / name) for name in required}}
+    (PROJECT / 'provenance.json').write_text(json.dumps(manifest, indent=2))
+    print('Project:', PROJECT)
+    print('Skills from:', SKILLS_SOURCE)
+    print('Review opencode.json before opening OpenCode.')
+    # Don't copy a real key into the project (it may be committed or read by the agent)
+    missing = [name for name in ITEMS if not (SHARED_OPENCODE / name).exists()]
+    if missing:
+        raise FileNotFoundError(f'Missing in {SHARED_OPENCODE}: {missing}')
+    dest_root.mkdir(parents=True, exist_ok=True)
+    replace_all = False
+    skip_all = False
+    for _name in ITEMS:
+        src, dst = (SHARED_OPENCODE / _name, dest_root / _name)
+        if dst.exists() or dst.is_symlink():
+            if skip_all:
+                print('Skipped (already present):', _name)
+    # Keep any rules already in the template, then add the course rules.
+    # The last matching rule wins, so the course rules take priority.
+                continue
+            if not replace_all:
+                while True:
+                    answer = input(f'{dst} already exists. Replace it? [y]es / [n]o / [a]ll / [s]kip all: ').strip().lower()
+                    if answer in ('y', 'yes', 'n', 'no', '', 'a', 'all', 's', 'skip'):
+                        break
+                    print('Please enter y, n, a, or s.')
+                if answer in ('a', 'all'):
+                    replace_all = True
+                elif answer in ('s', 'skip'):
+                    skip_all = True
+                    print('Skipped (already present):', _name)
+                    continue
+                elif answer not in ('y', 'yes'):
+                    print('Skipped (already present):', _name)
+                    continue
+            if dst.is_dir() and (not dst.is_symlink()):
+                shutil.rmtree(dst)
+    # Check the source before changing anything
+            else:
+                dst.unlink()
+        if src.is_dir():
+            shutil.copytree(src, dst, symlinks=True)
+        else:
+            shutil.copy2(src, dst)
+        print('Copied:', _name)
+    opencode_bin = dest_root / 'bin' / 'opencode'
+    print('\nOpenCode binary:', opencode_bin, '(found)' if opencode_bin.exists() else '(NOT FOUND)')
+    print(f'Start it from the project folder with:  cd {PROJECT} && .opencode/bin/opencode')  # "n", "no", or Enter = keep  # Remove the existing item before copying  # symlinks=True keeps node_modules/.bin links intact  # copy2 keeps executable permissions
     return (
         Markdown,
         PROJECT,
@@ -249,26 +312,51 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### Start OpenCode
+    ### Review OpenCode Project Structure
 
-    In a terminal, copy a preset version of OpenCode from `/blue/bsc4452/share/.opencode` to the `airway` directory.
+    The setup cells should have gotten everything set up for you, including copying a pre-installed version of OpenCode from `/blue/bsc4452/share/.opencode` into a new `notebook4_project` directory.
 
-    The command should be:
-
-            cd /blue/bsc4452/$USER/Jupyter_content/airway
-            cp /blue/bsc4452/share/.opencode .
-
-    You should have already set up the `.env` file with your API key from [notebook 1](A01_Intro_to_Agenitc_AI.ipynb).
-
-    In a terminal start OpenCode (assuming you are in the `airway/notebook4_project` directory):
-
-            ../.opencode/bin/opencode
-
-    Confirm the selected model and permissions using your configuration.
-
-    Review the initial files before proceeding with the analysis.
+    Let's take a quick look at the folder structure:
     """)
     return
+
+
+@app.cell
+def _(Path):
+    # Show what's in the new PROJECT directory
+    PROJECT_1 = Path(globals().get('PROJECT', Path.cwd())).resolve()
+    MAX_DEPTH = 3
+    MAX_ENTRIES = 15  # per folder; set to None to show everything
+
+    def tree(path: Path, prefix: str='', depth: int=1):
+        try:
+            entries = sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
+        except PermissionError:
+            print(prefix + '└── [permission denied]')
+            return
+        shown = entries if MAX_ENTRIES is None else entries[:MAX_ENTRIES]
+        hidden = len(entries) - len(shown)
+        for i, entry in enumerate(shown):
+            last = i == len(shown) - 1 and hidden == 0
+            connector = '└── ' if last else '├── '
+            if entry.is_symlink():
+                label = f'{entry.name} -> {entry.readlink()}'
+            elif entry.is_dir():
+                label = entry.name + '/'
+            else:
+                label = entry.name
+            print(prefix + connector + label)
+            if entry.is_dir() and (not entry.is_symlink()) and (depth < MAX_DEPTH):
+                tree(entry, prefix + ('    ' if last else '│   '), depth + 1)
+        if hidden:
+            print(prefix + f'└── ... ({hidden} more)')
+    root = PROJECT_1
+    if root.is_dir():
+        print(str(root) + '/')
+        tree(root)
+    else:
+        print('Not found:', root)
+    return (PROJECT_1,)
 
 
 @app.cell(hide_code=True)
@@ -278,6 +366,8 @@ def _(mo):
 
     Edit the skill below before running its cell. Add a description explaining
     when the agent should use it and one additional sanity check.
+
+    > **NOTE:** On Monday, we edited this a bit, I (with Claude's help) made some more updates. There's no need to edit it more now.
 
     The database's actual schema takes precedence over earlier descriptions.
     The preparation script did not explicitly create primary-key constraints.
@@ -290,55 +380,22 @@ def _(mo):
 
 
 @app.cell
-def _(Markdown, PROJECT, display):
-    student_skill = """
-    ---
-    name: airway-sqlite
-    description: Inspect and query the local airway SQLite database for RNA-seq counts and sample metadata.
-    metadata:
-      version: "1.0"
-    ---
-
-    # Airway SQLite
-
-    ## Before querying
-    List tables and inspect their actual columns. Do not assume gene symbols or
-    biotypes exist.
-
-    ## Expected tables
-    - samples: run_id, SampleName, cell, dex
-    - counts: gene_id, run_id, count
-    - genes: gene_id and any available annotation columns
-
-    ## Rules
-    - Open using sqlite3.connect("file:data/airway.db?mode=ro", uri=True).
-    - Use context management that closes the connection.
-    - Do not modify the database or anything in data/.
-    - Join on run_id or gene_id; do not join on symbols.
-    - Return at most 50 rows; report whether additional rows were omitted.
-    - Explain whether the query concerns raw counts or normalized expression.
-    - Provide the exact SQL, executed result, and relevant limitations.
-    - For differential expression, use raw counts and the paired cell-line design.
-
-    ## Sanity checks
-    - Expect eight samples and four cell lines.
-    - Check that each cell line has one trt and one untrt sample.
-    - TODO: Add one more check.
-    """
-    destination = PROJECT / ".opencode/skills/airway-sqlite"
-    destination.mkdir()
-    (destination / "SKILL.md").write_text(student_skill.strip() + "\n")
+def _(Markdown, PROJECT_1, display):
+    student_skill = '\n---\nname: airway-sqlite\ndescription: Inspect and query the local airway RNA-seq SQLite database (data/airway.db) for counts, sample metadata, and gene annotation. Use for any question about the airway dataset.metadata:\n  version: "1.0"\n---\n\n# Airway SQLite\n\n## Before querying\nList tables and inspect their actual columns. Do not assume gene symbols or\nbiotypes exist.\n\n## Expected tables\n- samples: run_id, SampleName, cell, dex\n- counts: gene_id, run_id, count\n- genes: gene_id and any available annotation columns\n\n## Rules\n- Open using sqlite3.connect("file:data/airway.db?mode=ro", uri=True).\n- Close connections explicitly, e.g. `with closing(sqlite3.connect(...)) as con:`\n  (from contextlib); `with sqlite3.connect(...)` alone does not close it.\n- Do not modify the database or anything in data/.\n- Join on run_id or gene_id; do not join on symbols.\n- Return at most 50 rows; report whether additional rows were omitted.\n- Explain whether the query concerns raw counts or normalized expression.\n- Provide the exact SQL, executed result, and relevant limitations.\n- For differential expression, use raw counts and the paired cell-line design.\n\n## Sanity checks\n- Expect eight samples and four cell lines.\n- Check that each cell line has one trt and one untrt sample.\n- Report total counts per sample (library size); flag any sample more than\n  ~3x from the median. Differences are expected and handled by DESeq2\n  normalization, so do not rescale or drop samples.\n'
+    destination = PROJECT_1 / '.opencode/skills/airway-sqlite'
+    destination.mkdir(parents=True, exist_ok=True)
+    (destination / 'SKILL.md').write_text(student_skill.strip() + '\n')
     display(Markdown(student_skill))
     return
 
 
 @app.cell
-def _(PROJECT, Path, display, pd, sqlite3):
+def _(PROJECT_1, Path, display, pd, sqlite3):
     def readonly_connection(path):
-        con = sqlite3.connect(Path(path).resolve().as_uri() + '?mode=ro', uri=True)  # as_uri() correctly handles spaces and other URI characters.
+        con = sqlite3.connect(Path(path).resolve().as_uri() + '?mode=ro', uri=True)
         con.execute('PRAGMA query_only=ON')
         return con
-    con = readonly_connection(PROJECT / 'data/airway.db')
+    con = readonly_connection(PROJECT_1 / 'data/airway.db')
     try:
         tables = pd.read_sql_query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name", con)
         display(tables)
@@ -351,7 +408,7 @@ def _(PROJECT, Path, display, pd, sqlite3):
     finally:
         con.close()
     display(zero_check)
-    zero_check.to_csv(PROJECT / 'outputs/zero_gene_check.csv', index=False)
+    zero_check.to_csv(PROJECT_1 / 'outputs/zero_gene_check.csv', index=False)
     return
 
 
@@ -396,10 +453,10 @@ def _(mo):
 
 
 @app.cell
-def _(PROJECT):
+def _(PROJECT_1):
     stage_prompts = {'01_validation': '\nBuild scripts/validate_inputs.sh plus a Python validation helper if needed.\nThe Bash script must use set -euo pipefail and invoke the prepared environment.\n\nValidate data/airway_counts.csv and data/airway_samples.csv:\n- unique gene_id and run_id values;\n- exactly matching count columns and metadata run_id values;\n- numeric, finite, nonnegative integer counts without missing values;\n- eight samples, four cell lines, one trt and one untrt per line;\n- actual annotation columns in genes.csv, with no assumptions.\n\nReject invalid inputs without modifying them.\nPrint concise checks and return a nonzero exit status on failure.\nPropose the plan first. Do not install packages.\n', '02_differential_expression': '\nLoad the pydeseq2 skill and build scripts/differential_expression.py.\nUse the current API for the installed PyDESeq2 version.\nUse raw counts, transposed to samples x genes.\nAlign metadata explicitly by run_id; assert identical sample order.\nFit the paired design ~ cell + dex with an explicit trt versus untrt contrast.\n\nUse this fixed prefilter: retain genes with count >= 10 in at least 4 samples.\nUse alpha=0.05 and record the handling of independent filtering and outliers.\nDo not use selected marker genes to choose filters or analysis settings.\n\nWrite outputs/de_results.csv with:\ngene_id, baseMean, log2FoldChange, lfcSE, stat, pvalue, padj.\nRetain missing padj values rather than replacing them with zero.\n\nWrite outputs/analysis_manifest.json with:\nmethod, design, contrast, input_scale, sample_order_checked,\nfilter_rule, package_versions.\nFor this task, expected values include input_scale="raw_integer_counts",\nsample_order_checked=true, and contrast=["dex","trt","untrt"].\n\nPreserve exact code, package versions, warnings, and failures.\nDo not normalize counts externally before fitting.\n', '03_plot_and_runner': '\nUse the matplotlib skill to create scripts/plot_volcano.py and run.sh.\nrun.sh must use set -euo pipefail, run validation, differential expression,\nand plotting in that order, and stop on any failed stage.\n\nThe volcano plot must use log2FoldChange on x and -log10(padj) on y.\nExclude missing adjusted p-values and report how many were excluded.\nClip zero adjusted p-values only for plotting and document that choice.\nUse fixed reference lines at padj=0.05 and abs(log2FoldChange)=1.\nExplain that the effect-size line is a visualization threshold, not an\nadditional hypothesis test.\n\nWrite outputs/volcano.png. Do not fabricate gene labels if gene_name is absent.\nDo not modify the results table for plotting. No external service is needed.\n'}
     for _name, prompt in stage_prompts.items():
-        (PROJECT / 'prompts' / f'{_name}.txt').write_text(prompt.strip() + '\n')
+        (PROJECT_1 / 'prompts' / f'{_name}.txt').write_text(prompt.strip() + '\n')
     for _name, prompt in stage_prompts.items():
         print('\n' + '=' * 60 + '\n' + _name + '\n')
         print(prompt.strip())
@@ -410,6 +467,8 @@ def _(PROJECT):
 def _(mo):
     mo.md(r"""
     ### Run the run.sh script
+
+    > **NOTE:** The `run.sh` script is created as part of the output from the prompts above. You need to prompt OpenCode with the three prompts in order to get the script.
 
     The `run.sh` script is the master orchestrator that ties together all three analysis stages in sequence.
 
@@ -424,64 +483,48 @@ def _(mo):
         * Share a complete, documented pipeline
         * Ensure consistency
 
-    Run `bash run.sh` only after reviewing the scripts. Save the command output
+    #### In the terminal
+    **Run `bash run.sh` only after reviewing the scripts.** Save the command output
     to a log in `outputs/`, preserving the pipeline's exit status.
     """)
     return
 
 
 @app.cell
-def _(PROJECT, display, np, pd):
+def _(PROJECT_1, display, np, pd):
     # Independent input and output checks. Run after the agent's pipeline finishes.
-    counts = pd.read_csv(PROJECT / "data/airway_counts.csv")
-    samples = pd.read_csv(PROJECT / "data/airway_samples.csv")
-
-    assert counts["gene_id"].is_unique
-    assert samples["run_id"].is_unique
-    assert set(counts.columns[1:]) == set(samples["run_id"])
-    assert len(samples) == 8 and samples["cell"].nunique() == 4
-
-    pair_table = pd.crosstab(samples["cell"], samples["dex"])
-    assert set(pair_table.columns) == {"trt", "untrt"}
-    assert (pair_table[["trt", "untrt"]] == 1).all().all()
-
-    values = counts.drop(columns="gene_id").apply(pd.to_numeric).to_numpy()
+    counts = pd.read_csv(PROJECT_1 / 'data/airway_counts.csv')
+    samples = pd.read_csv(PROJECT_1 / 'data/airway_samples.csv')
+    assert counts['gene_id'].is_unique
+    assert samples['run_id'].is_unique
+    assert set(counts.columns[1:]) == set(samples['run_id'])
+    assert len(samples) == 8 and samples['cell'].nunique() == 4
+    pair_table = pd.crosstab(samples['cell'], samples['dex'])
+    assert set(pair_table.columns) == {'trt', 'untrt'}
+    assert (pair_table[['trt', 'untrt']] == 1).all().all()
+    values = counts.drop(columns='gene_id').apply(pd.to_numeric).to_numpy()
     assert np.isfinite(values).all()
     assert (values >= 0).all() and (values == np.floor(values)).all()
-
-    expected_retained = set(
-        counts.loc[(values >= 10).sum(axis=1) >= 4, "gene_id"]
-    )
-
-    results_path = PROJECT / "outputs/de_results.csv"
+    expected_retained = set(counts.loc[(values >= 10).sum(axis=1) >= 4, 'gene_id'])
+    results_path = PROJECT_1 / 'outputs/de_results.csv'
     if not results_path.exists():
-        raise FileNotFoundError("Run and review the agent pipeline first.")
-
+        raise FileNotFoundError('Run and review the agent pipeline first.')
     results = pd.read_csv(results_path)
-    required_columns = {
-        "gene_id", "baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"
-    }
+    required_columns = {'gene_id', 'baseMean', 'log2FoldChange', 'lfcSE', 'stat', 'pvalue', 'padj'}
     assert required_columns.issubset(results.columns)
-    assert results["gene_id"].is_unique
-    assert set(results["gene_id"]) == expected_retained
-
-    for column in ("pvalue", "padj"):
+    assert results['gene_id'].is_unique
+    assert set(results['gene_id']) == expected_retained
+    for column in ('pvalue', 'padj'):
         assert results[column].dropna().between(0, 1).all()
-
-    # Independent, descriptive raw-count summaries: NOT DESeq2 effect estimates.
-    treated_ids = samples.loc[samples["dex"] == "trt", "run_id"].tolist()
-    control_ids = samples.loc[samples["dex"] == "untrt", "run_id"].tolist()
-    raw_summary = pd.DataFrame({
-        "gene_id": counts["gene_id"],
-        "mean_raw_trt": counts[treated_ids].mean(axis=1),
-        "mean_raw_untrt": counts[control_ids].mean(axis=1),
-    })
+    treated_ids = samples.loc[samples['dex'] == 'trt', 'run_id'].tolist()
+    control_ids = samples.loc[samples['dex'] == 'untrt', 'run_id'].tolist()
+    raw_summary = pd.DataFrame({'gene_id': counts['gene_id'], 'mean_raw_trt': counts[treated_ids].mean(axis=1), 'mean_raw_untrt': counts[control_ids].mean(axis=1)})
     display(pair_table)
-    print("Retained genes:", len(results))
-    print("Missing adjusted p-values:", results["padj"].isna().sum())
-    display(results.sort_values(["padj", "gene_id"]).head(10))
-
-    raw_summary.to_csv(PROJECT / "outputs/raw_count_summary.csv", index=False)
+    print('Retained genes:', len(results))
+    print('Missing adjusted p-values:', results['padj'].isna().sum())
+    display(results.sort_values(['padj', 'gene_id']).head(10))
+    # Independent, descriptive raw-count summaries: NOT DESeq2 effect estimates.
+    raw_summary.to_csv(PROJECT_1 / 'outputs/raw_count_summary.csv', index=False)
     return (results,)
 
 
@@ -505,64 +548,30 @@ def _(mo):
 
 
 @app.cell
-def _(PROJECT, display, manifest, pd, required, results, sha256):
-    genes = pd.read_csv(PROJECT / "data/genes.csv")
-    markers = ["FKBP5", "TSC22D3", "PER1", "DUSP1"]
-
-    if "gene_name" not in genes.columns:
-        print("gene_name is absent: marker verification needs a verified mapping.")
+def _(PROJECT_1, display, manifest, pd, required, results, sha256):
+    genes = pd.read_csv(PROJECT_1 / 'data/genes.csv')
+    markers = ['FKBP5', 'TSC22D3', 'PER1', 'DUSP1']
+    if 'gene_name' not in genes.columns:
+        print('gene_name is absent: marker verification needs a verified mapping.')
     else:
-        assert genes["gene_id"].is_unique, "Resolve duplicate annotations first."
-        marker_annotations = genes.loc[
-            genes["gene_name"].isin(markers), ["gene_id", "gene_name"]
-        ]
-        marker_results = marker_annotations.merge(
-            results, on="gene_id", how="left", validate="one_to_one",
-            indicator=True,
-        )
+        assert genes['gene_id'].is_unique, 'Resolve duplicate annotations first.'
+        marker_annotations = genes.loc[genes['gene_name'].isin(markers), ['gene_id', 'gene_name']]
+        marker_results = marker_annotations.merge(results, on='gene_id', how='left', validate='one_to_one', indicator=True)
         display(marker_results)
-        print("Symbols not mapped:", sorted(set(markers) - set(genes["gene_name"])))
-        print("left_only rows were mapped but absent from the retained results.")
-        marker_results.to_csv(PROJECT / "outputs/marker_check.csv", index=False)
-
-    integrity = {
-        name: sha256(PROJECT / "data" / name) == manifest["input_sha256"][name]
-        for name in required
-    }
-    assert all(integrity.values()), "An input file changed!"
-    print("Input hashes unchanged:", integrity)
+        print('Symbols not mapped:', sorted(set(markers) - set(genes['gene_name'])))
+        print('left_only rows were mapped but absent from the retained results.')
+        marker_results.to_csv(PROJECT_1 / 'outputs/marker_check.csv', index=False)
+    integrity = {name: sha256(PROJECT_1 / 'data' / name) == manifest['input_sha256'][name] for name in required}
+    assert all(integrity.values()), 'An input file changed!'
+    print('Input hashes unchanged:', integrity)
     return
 
 
 @app.cell
-def _(PROJECT):
-    reflection_template = """
-    # Session 4 reflection
-
-    ## Agent interaction record
-    | Stage | Skill actually loaded | Files/commands reviewed | Errors/corrections |
-    |---|---|---|---|
-    | SQL question | | | |
-    | Validation | | | |
-    | Differential expression | | | |
-    | Plotting | | | |
-
-    ## Independent checks
-    - Zero-count SQL result and agreement:
-    - Sample-order and paired-design checks:
-    - Contrast direction:
-    - Input integrity:
-    - Marker observations and annotation limitations:
-    - Remaining unverified claims:
-
-    ## Debrief
-    What did the harness automate?
-    What did the skills contribute?
-    Which safeguards were instructions, and which were enforced controls?
-    What would need to change before using private or much larger data?
-    """
-    (PROJECT / "reflection.md").write_text(reflection_template.strip() + "\n")
-    print("Complete:", PROJECT / "reflection.md")
+def _(PROJECT_1):
+    reflection_template = '\n# Session 4 reflection\n\n## Agent interaction record\n| Stage | Skill actually loaded | Files/commands reviewed | Errors/corrections |\n|---|---|---|---|\n| SQL question | | | |\n| Validation | | | |\n| Differential expression | | | |\n| Plotting | | | |\n\n## Independent checks\n- Zero-count SQL result and agreement:\n- Sample-order and paired-design checks:\n- Contrast direction:\n- Input integrity:\n- Marker observations and annotation limitations:\n- Remaining unverified claims:\n\n## Debrief\nWhat did the harness automate?\nWhat did the skills contribute?\nWhich safeguards were instructions, and which were enforced controls?\nWhat would need to change before using private or much larger data?\n'
+    (PROJECT_1 / 'reflection.md').write_text(reflection_template.strip() + '\n')
+    print('Complete:', PROJECT_1 / 'reflection.md')
     return
 
 
